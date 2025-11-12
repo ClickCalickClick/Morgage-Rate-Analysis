@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mortgage Rate Analyzer</title>
+    <!-- LIBRARY LOADS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjs@11.9.1/lib/browser/math.min.js"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+    <!-- UI MARKUP -->
+    <header class="bg-blue-600 text-white p-4">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold">Mortgage Rate Analyzer</h1>
+            <nav>
+                <button id="settings-btn" class="bg-blue-500 hover:bg-blue-700 px-4 py-2 rounded">Settings</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container mx-auto p-4">
+        <!-- Input Panel -->
+        <section id="input-panel" class="bg-white p-4 rounded shadow mb-4">
+            <h2 class="text-xl font-semibold mb-2">Search Rates</h2>
+            <input type="text" id="zip-input" placeholder="Enter ZIP Code" class="border p-2 mr-2">
+            <button id="search-btn" class="bg-blue-500 text-white px-4 py-2 rounded">Search</button>
+        </section>
+
+        <!-- Dashboard -->
+        <section id="dashboard" class="bg-white p-4 rounded shadow mb-4">
+            <h2 class="text-xl font-semibold mb-2">Current Rates</h2>
+            <div id="rates-table" class="overflow-x-auto">
+                <!-- Table will be populated by JS -->
+            </div>
+        </section>
+
+        <!-- Charts -->
+        <section id="charts" class="bg-white p-4 rounded shadow mb-4">
+            <h2 class="text-xl font-semibold mb-2">Historical Trends</h2>
+            <canvas id="rate-chart" width="400" height="200"></canvas>
+        </section>
+
+        <!-- Calculator -->
+        <section id="calculator" class="bg-white p-4 rounded shadow mb-4">
+            <h2 class="text-xl font-semibold mb-2">Mortgage Calculator</h2>
+            <form id="calc-form">
+                <label>Home Price: <input type="number" id="home-price" placeholder="300000"></label><br>
+                <label>Down Payment: <input type="number" id="down-payment" placeholder="60000"></label><br>
+                <label>Rate (%): <input type="number" id="rate" step="0.01" placeholder="6.5"></label><br>
+                <label>Term (years): <input type="number" id="term" placeholder="30"></label><br>
+                <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded mt-2">Calculate</button>
+            </form>
+            <div id="calc-results" class="mt-4"></div>
+        </section>
+
+        <!-- AI Panel -->
+        <section id="ai-panel" class="bg-white p-4 rounded shadow mb-4">
+            <h2 class="text-xl font-semibold mb-2">AI Recommendations</h2>
+            <textarea id="ai-prompt" placeholder="Ask for advice..." class="border p-2 w-full"></textarea>
+            <button id="ai-submit" class="bg-purple-500 text-white px-4 py-2 rounded mt-2">Get AI Analysis</button>
+            <div id="ai-response" class="mt-4"></div>
+        </section>
+    </main>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center">
+        <div class="bg-white p-6 rounded shadow max-w-md w-full">
+            <h3 class="text-lg font-semibold mb-4">Settings</h3>
+            <!-- Gemini Key -->
+            <div class="mb-4">
+                <label class="block mb-2">Gemini API Key</label>
+                <input type="password" id="gemini-key" class="border p-2 w-full">
+                <div class="mt-2">
+                    <label><input type="radio" name="key-storage" value="session" checked> Session only</label>
+                    <label class="ml-4"><input type="radio" name="key-storage" value="local"> Store locally</label>
+                </div>
+                <p class="text-sm text-red-500 mt-1">Warning: Local storage exposes your key to XSS risks.</p>
+                <button id="save-key" class="bg-blue-500 text-white px-3 py-1 rounded mt-2">Save Key</button>
+                <button id="clear-key" class="bg-red-500 text-white px-3 py-1 rounded mt-2 ml-2">Clear Key</button>
+            </div>
+            <!-- Export/Import -->
+            <div class="mb-4">
+                <button id="export-btn" class="bg-green-500 text-white px-3 py-1 rounded">Export Data</button>
+                <input type="file" id="import-file" accept=".json" class="ml-2">
+                <button id="import-btn" class="bg-yellow-500 text-white px-3 py-1 rounded ml-2">Import</button>
+                <div id="import-preview" class="mt-2"></div>
+            </div>
+            <!-- Preferences -->
+            <div class="mb-4">
+                <label><input type="checkbox" id="preload-last-zip"> Preload last ZIP on startup</label>
+            </div>
+            <button id="close-settings" class="bg-gray-500 text-white px-4 py-2 rounded">Close</button>
+        </div>
+    </div>
+
+    <footer class="bg-gray-800 text-white p-4 mt-8">
+        <div class="container mx-auto text-center">
+            <p>Data sourced from Freddie Mac, FRED, and aggregators. For informational purposes only.</p>
+        </div>
+    </footer>
+
+    <!-- CONFIG / CONSTANTS -->
+    <script>
+        const CONFIG = {
+            nationalBaselinePath: 'data/national-averages.json',
+            proxyUrl: 'https://your-proxy-url.netlify.app/.netlify/functions/fetchRates', // Placeholder
+            geminiApiUrl: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-latest:generateContent',
+            defaultZip: localStorage.getItem('lastZip') || '10001'
+        };
+    </script>
+
+    <!-- STORAGE / DB (Dexie) -->
+    <script>
+        const db = new Dexie('MortgageRatesDB');
+        db.version(1).stores({
+            rates: '++id, zipCode, date, lender, rate, product'
+        });
+
+        async function addRate(data) {
+            await db.rates.add(data);
+        }
+
+        async function getRatesByZip(zipCode) {
+            return await db.rates.where('zipCode').equals(zipCode).toArray();
+        }
+
+        async function getLatestRate(zipCode) {
+            const rates = await getRatesByZip(zipCode);
+            return rates.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+        }
+    </script>
+
+    <!-- SCRAPER API / FETCH LAYER -->
+    <script>
+        async function fetchRates(zipCode) {
+            // Placeholder: Call proxy for scraping
+            try {
+                const response = await fetch(`${CONFIG.proxyUrl}?zip=${zipCode}`);
+                return await response.json();
+            } catch (e) {
+                console.error('Fetch failed:', e);
+                return null;
+            }
+        }
+    </script>
+
+    <!-- GEMINI CLIENT -->
+    <script>
+        async function callGemini(prompt) {
+            const key = sessionStorage.getItem('geminiKey') || localStorage.getItem('geminiKey');
+            if (!key) throw new Error('No Gemini key set');
+            const response = await fetch(`${CONFIG.geminiApiUrl}?key=${key}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            });
+            const data = await response.json();
+            return data.candidates[0].content.parts[0].text;
+        }
+    </script>
+
+    <!-- CALCULATOR / AFFORDABILITY -->
+    <script>
+        function calculateMonthlyPayment(price, downPayment, rate, term) {
+            const principal = price - downPayment;
+            const monthlyRate = rate / 100 / 12;
+            const numPayments = term * 12;
+            return math.round(principal * (monthlyRate * math.pow(1 + monthlyRate, numPayments)) / (math.pow(1 + monthlyRate, numPayments) - 1), 2);
+        }
+
+        function calculateTotalCost(monthlyPayment, term) {
+            return math.round(monthlyPayment * term * 12, 2);
+        }
+
+        function calculateBreakEvenPoint(refiCosts, monthlySavings) {
+            return math.round(refiCosts / monthlySavings, 1);
+        }
+    </script>
+
+    <!-- CHARTS -->
+    <script>
+        let rateChart;
+        function renderChart(data) {
+            const ctx = document.getElementById('rate-chart').getContext('2d');
+            if (rateChart) rateChart.destroy();
+            rateChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.map(d => d.date),
+                    datasets: [{
+                        label: 'Rate (%)',
+                        data: data.map(d => d.rate),
+                        borderColor: 'rgb(75, 192, 192)',
+                        tension: 0.1
+                    }]
+                }
+            });
+        }
+    </script>
+
+    <!-- EXPORT / IMPORT HANDLERS -->
+    <script>
+        async function exportData() {
+            const data = await db.rates.toArray();
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'mortgage-rates-export.json';
+            a.click();
+        }
+
+        async function importData(jsonData, mode) {
+            if (mode === 'replace') await db.rates.clear();
+            await db.rates.bulkAdd(jsonData);
+        }
+    </script>
+
+    <!-- EVENT BINDINGS / APP BOOTSTRAP -->
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Load national baseline
+            try {
+                const response = await fetch(CONFIG.nationalBaselinePath);
+                const nationalData = await response.json();
+                // Populate dashboard with national data
+                renderTable(nationalData);
+                renderChart(nationalData);
+            } catch (e) {
+                console.error('Failed to load national data:', e);
+            }
+
+            // Wire events
+            document.getElementById('search-btn').addEventListener('click', async () => {
+                const zip = document.getElementById('zip-input').value;
+                const data = await fetchRates(zip);
+                if (data) {
+                    await Promise.all(data.map(addRate));
+                    renderTable(data);
+                    renderChart(data);
+                    localStorage.setItem('lastZip', zip);
+                }
+            });
+
+            document.getElementById('calc-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const price = +document.getElementById('home-price').value;
+                const down = +document.getElementById('down-payment').value;
+                const rate = +document.getElementById('rate').value;
+                const term = +document.getElementById('term').value;
+                const monthly = calculateMonthlyPayment(price, down, rate, term);
+                const total = calculateTotalCost(monthly, term);
+                document.getElementById('calc-results').innerHTML = `Monthly: $${monthly}<br>Total: $${total}`;
+            });
+
+            document.getElementById('ai-submit').addEventListener('click', async () => {
+                const prompt = document.getElementById('ai-prompt').value;
+                try {
+                    const response = await callGemini(prompt);
+                    document.getElementById('ai-response').innerHTML = response;
+                } catch (e) {
+                    document.getElementById('ai-response').innerHTML = 'Error: ' + e.message;
+                }
+            });
+
+            document.getElementById('settings-btn').addEventListener('click', () => {
+                document.getElementById('settings-modal').classList.remove('hidden');
+            });
+
+            document.getElementById('close-settings').addEventListener('click', () => {
+                document.getElementById('settings-modal').classList.add('hidden');
+            });
+
+            document.getElementById('save-key').addEventListener('click', () => {
+                const key = document.getElementById('gemini-key').value;
+                const storage = document.querySelector('input[name="key-storage"]:checked').value;
+                if (storage === 'local') localStorage.setItem('geminiKey', key);
+                else sessionStorage.setItem('geminiKey', key);
+                alert('Key saved');
+            });
+
+            document.getElementById('clear-key').addEventListener('click', () => {
+                localStorage.removeItem('geminiKey');
+                sessionStorage.removeItem('geminiKey');
+                document.getElementById('gemini-key').value = '';
+                alert('Key cleared');
+            });
+
+            document.getElementById('export-btn').addEventListener('click', exportData);
+
+            document.getElementById('import-btn').addEventListener('click', async () => {
+                const file = document.getElementById('import-file').files[0];
+                if (!file) return;
+                const text = await file.text();
+                const data = JSON.parse(text);
+                // Preview
+                document.getElementById('import-preview').innerHTML = `Import ${data.length} records? <button id="confirm-import">Merge</button> <button id="replace-import">Replace</button>`;
+                document.getElementById('confirm-import').addEventListener('click', () => importData(data, 'merge'));
+                document.getElementById('replace-import').addEventListener('click', () => importData(data, 'replace'));
+            });
+        });
+
+        function renderTable(data) {
+            const table = document.getElementById('rates-table');
+            table.innerHTML = '<table class="min-w-full"><thead><tr><th>Lender</th><th>Rate</th><th>Date</th></tr></thead><tbody>' +
+                data.map(d => `<tr><td>${d.lender}</td><td>${d.rate}%</td><td>${d.date}</td></tr>`).join('') +
+                '</tbody></table>';
+        }
+    </script>
+</body>
+</html>

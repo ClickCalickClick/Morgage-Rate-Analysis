@@ -1,0 +1,74 @@
+[
+    {
+        "date": "2024-01-01",
+        "lender": "Freddie Mac National Average",
+        "rate": 6.5,
+        "product": "30-year fixed"
+    },
+    {
+        "date": "2024-02-01",
+        "lender": "Freddie Mac National Average",
+        "rate": 6.4,
+        "product": "30-year fixed"
+    },
+    {
+        "date": "2024-03-01",
+        "lender": "Freddie Mac National Average",
+        "rate": 6.3,
+        "product": "30-year fixed"
+    },
+    {
+        "date": "2024-04-01",
+        "lender": "Freddie Mac National Average",
+        "rate": 6.2,
+        "product": "30-year fixed"
+    },
+    {
+        "date": "2024-05-01",
+        "lender": "Freddie Mac National Average",
+        "rate": 6.1,
+        "product": "30-year fixed"
+    },
+    {
+        "date": "2024-06-01",
+        "lender": "Freddie Mac National Average",
+        "rate": 6.0,
+        "product": "30-year fixed"
+    },
+    {
+        "date": "2024-07-01",
+        "lender": "Freddie Mac National Average",
+        "rate": 5.9,
+        "product": "30-year fixed"
+    },
+    {
+        "date": "2024-08-01",
+        "lender": "Freddie Mac National Average",
+        "rate": 5.8,
+        "product": "30-year fixed"
+    },
+    {
+        "date": "2024-09-01",
+        "lender": "Freddie Mac National Average",
+        "rate": 5.7,
+        "product": "30-year fixed"
+    },
+    {
+        "date": "2024-10-01",
+        "lender": "Freddie Mac National Average",
+        "rate": 5.6,
+        "product": "30-year fixed"
+    },
+    {
+        "date": "2024-11-01",
+        "lender": "Freddie Mac National Average",
+        "rate": 5.5,
+        "product": "30-year fixed"
+    },
+    {
+        "date": "2024-12-01",
+        "lender": "Freddie Mac National Average",
+        "rate": 5.4,
+        "product": "30-year fixed"
+    }
+]
