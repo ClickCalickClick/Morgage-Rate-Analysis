@@ -1,6 +1,23 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <!-- ============================================================================
+         MORTGAGE RATE ANALYZER - Single-Page Application
+         
+         TABLE OF CONTENTS:
+         1. LIBRARY LOADS (CDN) ........................ ~10
+         2. UI MARKUP .................................. ~30
+         3. CONFIG / CONSTANTS ......................... ~150
+         4. STORAGE / DB (Dexie) ....................... ~160
+         5. SCRAPER API / FETCH LAYER ................. ~175
+         6. GEMINI CLIENT ............................. ~185
+         7. CALCULATOR / AFFORDABILITY ................ ~200
+         8. CHARTS .................................... ~240
+         9. EXPORT / IMPORT HANDLERS .................. ~265
+         10. EVENT BINDINGS / APP BOOTSTRAP ........... ~280
+         
+         ========================================================================== -->
+    
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mortgage Rate Analyzer</title>
@@ -15,25 +32,86 @@
     <header class="bg-blue-600 text-white p-4">
         <div class="container mx-auto flex justify-between items-center">
             <h1 class="text-2xl font-bold">Mortgage Rate Analyzer</h1>
-            <nav>
-                <button id="settings-btn" class="bg-blue-500 hover:bg-blue-700 px-4 py-2 rounded">Settings</button>
+            <nav class="hidden md:flex gap-6 items-center">
+                <a href="#input-panel" class="hover:text-blue-200 transition">Analyze</a>
+                <a href="#calculator" class="hover:text-blue-200 transition">Calculator</a>
+                <a href="#charts" class="hover:text-blue-200 transition">Charts</a>
+                <button id="settings-btn" class="bg-blue-500 hover:bg-blue-700 px-4 py-2 rounded">⚙ Settings</button>
             </nav>
+            <button id="settings-btn-mobile" class="md:hidden bg-blue-500 hover:bg-blue-700 px-3 py-2 rounded">⚙</button>
         </div>
     </header>
 
     <main class="container mx-auto p-4">
         <!-- Input Panel -->
         <section id="input-panel" class="bg-white p-4 rounded shadow mb-4">
-            <h2 class="text-xl font-semibold mb-2">Search Rates</h2>
-            <input type="text" id="zip-input" placeholder="Enter ZIP Code" class="border p-2 mr-2">
-            <button id="search-btn" class="bg-blue-500 text-white px-4 py-2 rounded">Search</button>
+            <h2 class="text-xl font-semibold mb-4">Start Your Analysis</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Zip Code -->
+                <div>
+                    <label class="block text-sm font-medium mb-1">ZIP Code *</label>
+                    <input type="text" id="zip-input" placeholder="Enter ZIP Code" class="border p-2 w-full rounded">
+                </div>
+                
+                <!-- Home Price with Slider -->
+                <div>
+                    <label class="block text-sm font-medium mb-1">Home Price</label>
+                    <input type="number" id="home-price-input" placeholder="300000" value="400000" class="border p-2 w-full rounded mb-2">
+                    <input type="range" id="home-price-slider" min="50000" max="2000000" step="10000" value="400000" class="w-full">
+                    <div class="text-xs text-gray-500 mt-1">$50K - $2M</div>
+                </div>
+                
+                <!-- Down Payment Toggle: $ or % -->
+                <div>
+                    <label class="block text-sm font-medium mb-1">Down Payment</label>
+                    <div class="flex gap-2 mb-2">
+                        <input type="number" id="down-payment-input" placeholder="60000" value="80000" class="border p-2 flex-1 rounded">
+                        <select id="down-payment-type" class="border p-2 rounded">
+                            <option value="dollar">$ Amount</option>
+                            <option value="percent">% Percent</option>
+                        </select>
+                    </div>
+                    <input type="range" id="down-payment-slider" min="0" max="100" step="1" value="20" class="w-full">
+                    <div class="text-xs text-gray-500 mt-1">0% - 100%</div>
+                </div>
+                
+                <!-- Gross Annual Income -->
+                <div>
+                    <label class="block text-sm font-medium mb-1">Gross Annual Income <span class="text-gray-500 text-xs">(optional, for affordability)</span></label>
+                    <input type="number" id="annual-income" placeholder="80000" class="border p-2 w-full rounded">
+                </div>
+            </div>
+            
+            <button id="search-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded mt-4 w-full">Analyze Rates</button>
         </section>
 
         <!-- Dashboard -->
         <section id="dashboard" class="bg-white p-4 rounded shadow mb-4">
-            <h2 class="text-xl font-semibold mb-2">Current Rates</h2>
-            <div id="rates-table" class="overflow-x-auto">
-                <!-- Table will be populated by JS -->
+            <h2 class="text-xl font-semibold mb-4">Results Dashboard</h2>
+            
+            <!-- Summary & Affordability Row -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <!-- Best Rate Card -->
+                <div class="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded border border-green-300">
+                    <h3 class="text-sm font-semibold text-gray-700 mb-2">Best Rate Found</h3>
+                    <div class="text-3xl font-bold text-green-700" id="best-rate">--%</div>
+                    <p class="text-xs text-gray-600 mt-2" id="best-rate-lender">From: --</p>
+                </div>
+                
+                <!-- Affordability Scorecard -->
+                <div id="affordability-card" class="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded border border-blue-300">
+                    <h3 class="text-sm font-semibold text-gray-700 mb-2">Affordability Assessment</h3>
+                    <div class="text-2xl font-bold" id="affordability-status">--</div>
+                    <p class="text-xs text-gray-600 mt-2" id="affordability-message">Enter income to calculate</p>
+                </div>
+            </div>
+            
+            <!-- Lender Comparison Table -->
+            <div>
+                <h3 class="text-lg font-semibold mb-2">Today's Rates from Local Lenders</h3>
+                <div id="rates-table" class="overflow-x-auto">
+                    <!-- Table will be populated by JS -->
+                </div>
             </div>
         </section>
 
@@ -45,15 +123,65 @@
 
         <!-- Calculator -->
         <section id="calculator" class="bg-white p-4 rounded shadow mb-4">
-            <h2 class="text-xl font-semibold mb-2">Mortgage Calculator</h2>
-            <form id="calc-form">
-                <label>Home Price: <input type="number" id="home-price" placeholder="300000"></label><br>
-                <label>Down Payment: <input type="number" id="down-payment" placeholder="60000"></label><br>
-                <label>Rate (%): <input type="number" id="rate" step="0.01" placeholder="6.5"></label><br>
-                <label>Term (years): <input type="number" id="term" placeholder="30"></label><br>
-                <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded mt-2">Calculate</button>
-            </form>
-            <div id="calc-results" class="mt-4"></div>
+            <h2 class="text-xl font-semibold mb-4">Explore Your Mortgage</h2>
+            
+            <!-- Tab Toggle -->
+            <div class="flex gap-2 mb-4 border-b">
+                <button id="calc-tab-btn" class="px-4 py-2 border-b-2 border-blue-600 font-semibold">Mortgage Calculator</button>
+                <button id="refi-tab-btn" class="px-4 py-2 text-gray-600 hover:text-gray-900">Refinance Break-Even</button>
+            </div>
+            
+            <!-- Mortgage Calculator Tab -->
+            <div id="calc-tab" class="mb-4">
+                <form id="calc-form">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Loan Amount</label>
+                            <input type="number" id="loan-amount" placeholder="240000" class="border p-2 w-full rounded mb-2">
+                            <input type="range" id="loan-amount-slider" min="50000" max="2000000" step="10000" class="w-full">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Interest Rate (%)</label>
+                            <input type="number" id="rate" step="0.01" placeholder="6.5" class="border p-2 w-full rounded mb-2">
+                            <input type="range" id="rate-slider" min="2" max="12" step="0.1" class="w-full">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Loan Term (years)</label>
+                            <select id="term" class="border p-2 w-full rounded">
+                                <option value="15">15 years</option>
+                                <option value="30" selected>30 years</option>
+                                <option value="20">20 years</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded">Calculate</button>
+                </form>
+                <div id="calc-results" class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- Results will appear here -->
+                </div>
+            </div>
+            
+            <!-- Refinance Break-Even Tab -->
+            <div id="refi-tab" class="hidden mb-4">
+                <form id="refi-form">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Current Monthly Payment ($)</label>
+                            <input type="number" id="old-payment" placeholder="1500" class="border p-2 w-full rounded">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">New Monthly Payment ($)</label>
+                            <input type="number" id="new-payment" placeholder="1200" class="border p-2 w-full rounded">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Refinancing Costs ($)</label>
+                            <input type="number" id="refi-costs" placeholder="5000" class="border p-2 w-full rounded">
+                        </div>
+                    </div>
+                    <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded">Calculate Break-Even</button>
+                </form>
+                <div id="refi-results" class="mt-6"></div>
+            </div>
         </section>
 
         <!-- AI Panel -->
@@ -66,8 +194,8 @@
     </main>
 
     <!-- Settings Modal -->
-    <div id="settings-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center">
-        <div class="bg-white p-6 rounded shadow max-w-md w-full">
+    <div id="settings-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded shadow max-w-md w-full mx-4">
             <h3 class="text-lg font-semibold mb-4">Settings</h3>
             <!-- Gemini Key -->
             <div class="mb-4">
@@ -164,19 +292,58 @@
 
     <!-- CALCULATOR / AFFORDABILITY -->
     <script>
+        // Affordability Model (28/36 Rule)
+        function calculatePITI(price, downPayment, rate, term, monthlyRate) {
+            const principal = price - downPayment;
+            const monthlyPayment = calculateMonthlyPayment(price, downPayment, rate, term);
+            const propertyTax = (price * 0.012) / 12; // 1.2% annually
+            const insurance = (price * 0.005) / 12;   // 0.5% annually
+            return monthlyPayment + propertyTax + insurance;
+        }
+
+        function assessAffordability(yearlyIncome, homePrice, downPayment, rate, term) {
+            if (!yearlyIncome) return { status: 'unknown', message: 'Enter income to calculate affordability' };
+            
+            const grossMonthlyIncome = yearlyIncome / 12;
+            const maxHousingCost = grossMonthlyIncome * 0.28; // 28% rule
+            const piti = calculatePITI(homePrice, downPayment, rate, term);
+            
+            let status, message, color;
+            if (piti <= maxHousingCost) {
+                status = '✅ Affordable';
+                message = `Monthly housing cost ($${piti.toLocaleString(undefined, {maximumFractionDigits: 0})}) is within 28% of gross income.`;
+                color = 'from-green-50 to-green-100 border-green-300';
+            } else {
+                status = '⚠️ Potentially Unaffordable';
+                message = `Monthly housing cost ($${piti.toLocaleString(undefined, {maximumFractionDigits: 0})}) exceeds 28% guideline.`;
+                color = 'from-yellow-50 to-yellow-100 border-yellow-300';
+            }
+            
+            return { status, message, color, piti, maxAllowed: maxHousingCost };
+        }
+
         function calculateMonthlyPayment(price, downPayment, rate, term) {
             const principal = price - downPayment;
             const monthlyRate = rate / 100 / 12;
             const numPayments = term * 12;
-            return math.round(principal * (monthlyRate * math.pow(1 + monthlyRate, numPayments)) / (math.pow(1 + monthlyRate, numPayments) - 1), 2);
+            if (monthlyRate === 0) return principal / numPayments;
+            const numerator = monthlyRate * Math.pow(1 + monthlyRate, numPayments);
+            const denominator = Math.pow(1 + monthlyRate, numPayments) - 1;
+            return principal * (numerator / denominator);
         }
 
-        function calculateTotalCost(monthlyPayment, term) {
-            return math.round(monthlyPayment * term * 12, 2);
+        function calculateTotalCost(monthlyPayment, term, downPayment) {
+            return (monthlyPayment * term * 12) + downPayment;
         }
 
-        function calculateBreakEvenPoint(refiCosts, monthlySavings) {
-            return math.round(refiCosts / monthlySavings, 1);
+        function calculateTotalInterest(monthlyPayment, term, principal) {
+            return (monthlyPayment * term * 12) - principal;
+        }
+
+        function calculateBreakEvenPoint(refiCosts, oldMonthlyPayment, newMonthlyPayment) {
+            const monthlySavings = oldMonthlyPayment - newMonthlyPayment;
+            if (monthlySavings <= 0) return null;
+            return Math.round(refiCosts / monthlySavings);
         }
     </script>
 
@@ -204,60 +371,315 @@
     <!-- EXPORT / IMPORT HANDLERS -->
     <script>
         async function exportData() {
-            const data = await db.rates.toArray();
-            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const rates = await db.rates.toArray();
+            const exportObj = {
+                version: '1.0',
+                exportedAt: new Date().toISOString(),
+                app: {
+                    lastZip: localStorage.getItem('lastZip'),
+                    settings: {
+                        currency: 'USD',
+                        dateFormat: 'iso'
+                    }
+                },
+                rates: rates
+            };
+            const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'mortgage-rates-export.json';
+            a.download = `mortgage-rates-export-${new Date().toISOString().split('T')[0]}.json`;
             a.click();
         }
 
         async function importData(jsonData, mode) {
-            if (mode === 'replace') await db.rates.clear();
-            await db.rates.bulkAdd(jsonData);
+            try {
+                if (mode === 'replace') await db.rates.clear();
+                
+                // Validate each record
+                const validRecords = jsonData.filter(record => 
+                    record.zipCode && record.date && record.lender && 
+                    (record.rate !== undefined || record.rate !== null)
+                );
+                
+                if (validRecords.length === 0) {
+                    alert('No valid records found in import file');
+                    return;
+                }
+                
+                await db.rates.bulkAdd(validRecords);
+                alert(`Successfully imported ${validRecords.length} records (${jsonData.length - validRecords.length} skipped)`);
+                document.getElementById('import-preview').innerHTML = '';
+                document.getElementById('import-file').value = '';
+            } catch (e) {
+                alert('Import error: ' + e.message);
+            }
         }
     </script>
 
     <!-- EVENT BINDINGS / APP BOOTSTRAP -->
     <script>
+        // Synchronize input fields and sliders
+        function syncInputsAndSliders() {
+            // Home Price sync
+            const homePriceInput = document.getElementById('home-price-input');
+            const homePriceSlider = document.getElementById('home-price-slider');
+            homePriceInput?.addEventListener('change', () => {
+                homePriceSlider.value = homePriceInput.value;
+            });
+            homePriceSlider?.addEventListener('input', () => {
+                homePriceInput.value = homePriceSlider.value;
+            });
+
+            // Down Payment sync (handles $ vs %)
+            const downPaymentInput = document.getElementById('down-payment-input');
+            const downPaymentSlider = document.getElementById('down-payment-slider');
+            const downPaymentType = document.getElementById('down-payment-type');
+            const homePrice = () => +(homePriceInput?.value || 400000);
+
+            downPaymentType?.addEventListener('change', () => {
+                const isPercent = downPaymentType.value === 'percent';
+                if (isPercent) {
+                    const currentDollar = +(downPaymentInput?.value || 0);
+                    const percent = Math.round((currentDollar / homePrice()) * 100);
+                    downPaymentInput.value = percent;
+                    downPaymentSlider.value = percent;
+                    downPaymentSlider.max = 100;
+                    downPaymentInput.placeholder = '20 (%)';
+                } else {
+                    const currentPercent = +(downPaymentInput?.value || 20);
+                    const dollar = Math.round((currentPercent / 100) * homePrice());
+                    downPaymentInput.value = dollar;
+                    downPaymentSlider.value = dollar;
+                    downPaymentSlider.max = homePrice();
+                    downPaymentInput.placeholder = '80000 ($)';
+                }
+            });
+
+            downPaymentInput?.addEventListener('change', () => {
+                downPaymentSlider.value = downPaymentInput.value;
+            });
+            downPaymentSlider?.addEventListener('input', () => {
+                downPaymentInput.value = downPaymentSlider.value;
+            });
+
+            // Loan Amount sync (in calculator)
+            const loanAmountInput = document.getElementById('loan-amount');
+            const loanAmountSlider = document.getElementById('loan-amount-slider');
+            loanAmountInput?.addEventListener('change', () => {
+                loanAmountSlider.value = loanAmountInput.value;
+            });
+            loanAmountSlider?.addEventListener('input', () => {
+                loanAmountInput.value = loanAmountSlider.value;
+            });
+
+            // Rate sync (in calculator)
+            const rateInput = document.getElementById('rate');
+            const rateSlider = document.getElementById('rate-slider');
+            rateInput?.addEventListener('change', () => {
+                rateSlider.value = rateInput.value;
+            });
+            rateSlider?.addEventListener('input', () => {
+                rateInput.value = rateSlider.value;
+            });
+        }
+
+        // Tab switching
+        function setupTabSwitching() {
+            const calcTabBtn = document.getElementById('calc-tab-btn');
+            const refiTabBtn = document.getElementById('refi-tab-btn');
+            const calcTab = document.getElementById('calc-tab');
+            const refiTab = document.getElementById('refi-tab');
+
+            calcTabBtn?.addEventListener('click', () => {
+                calcTab.classList.remove('hidden');
+                refiTab.classList.add('hidden');
+                calcTabBtn.classList.add('border-b-2', 'border-blue-600');
+                refiTabBtn.classList.remove('border-b-2', 'border-blue-600');
+            });
+
+            refiTabBtn?.addEventListener('click', () => {
+                calcTab.classList.add('hidden');
+                refiTab.classList.remove('hidden');
+                refiTabBtn.classList.add('border-b-2', 'border-blue-600');
+                calcTabBtn.classList.remove('border-b-2', 'border-blue-600');
+            });
+        }
+
         document.addEventListener('DOMContentLoaded', async () => {
+            // Initialize syncing
+            syncInputsAndSliders();
+            setupTabSwitching();
+
             // Load national baseline
             try {
                 const response = await fetch(CONFIG.nationalBaselinePath);
                 const nationalData = await response.json();
-                // Populate dashboard with national data
                 renderTable(nationalData);
                 renderChart(nationalData);
             } catch (e) {
                 console.error('Failed to load national data:', e);
             }
 
-            // Wire events
+            // Preload last ZIP if preference enabled
+            const preloadLastZipCheckbox = document.getElementById('preload-last-zip');
+            const lastZip = localStorage.getItem('lastZip');
+            if (lastZip && preloadLastZipCheckbox?.checked) {
+                document.getElementById('zip-input').value = lastZip;
+            }
+
+            // Search button
             document.getElementById('search-btn').addEventListener('click', async () => {
                 const zip = document.getElementById('zip-input').value;
+                const income = +(document.getElementById('annual-income')?.value || 0);
+                if (!zip) {
+                    alert('Please enter a ZIP code');
+                    return;
+                }
+
                 const data = await fetchRates(zip);
                 if (data) {
                     await Promise.all(data.map(addRate));
                     renderTable(data);
                     renderChart(data);
                     localStorage.setItem('lastZip', zip);
+
+                    // Calculate affordability
+                    const homePrice = +(document.getElementById('home-price-input')?.value || 400000);
+                    let downPayment = +(document.getElementById('down-payment-input')?.value || 0);
+                    const isPercent = document.getElementById('down-payment-type')?.value === 'percent';
+                    if (isPercent) {
+                        downPayment = (downPayment / 100) * homePrice;
+                    }
+                    const rate = data[0]?.rate || 6.5;
+                    
+                    if (income > 0) {
+                        const affordability = assessAffordability(income, homePrice, downPayment, rate, 30);
+                        const card = document.getElementById('affordability-card');
+                        card.className = `bg-gradient-to-br ${affordability.color} p-4 rounded border`;
+                        document.getElementById('affordability-status').textContent = affordability.status;
+                        document.getElementById('affordability-message').textContent = affordability.message;
+                    }
                 }
             });
 
+            // Mortgage calculator
             document.getElementById('calc-form').addEventListener('submit', (e) => {
                 e.preventDefault();
-                const price = +document.getElementById('home-price').value;
-                const down = +document.getElementById('down-payment').value;
-                const rate = +document.getElementById('rate').value;
-                const term = +document.getElementById('term').value;
-                const monthly = calculateMonthlyPayment(price, down, rate, term);
-                const total = calculateTotalCost(monthly, term);
-                document.getElementById('calc-results').innerHTML = `Monthly: $${monthly}<br>Total: $${total}`;
+                const loanAmount = +(document.getElementById('loan-amount')?.value || 0);
+                const rate = +(document.getElementById('rate')?.value || 6.5);
+                const term = +(document.getElementById('term')?.value || 30);
+                
+                if (loanAmount <= 0) {
+                    alert('Please enter a loan amount');
+                    return;
+                }
+
+                const monthly = calculateMonthlyPayment(loanAmount, 0, rate, term);
+                const total = calculateTotalCost(monthly, term, 0);
+                const interest = calculateTotalInterest(monthly, term, loanAmount);
+
+                const resultsDiv = document.getElementById('calc-results');
+                resultsDiv.innerHTML = `
+                    <div class="bg-blue-50 p-4 rounded border border-blue-300">
+                        <div class="text-sm text-gray-600">Monthly Payment (P&I)</div>
+                        <div class="text-3xl font-bold text-blue-700">$${monthly.toLocaleString(undefined, {maximumFractionDigits: 2})}</div>
+                    </div>
+                    <div class="bg-green-50 p-4 rounded border border-green-300">
+                        <div class="text-sm text-gray-600">Total Interest Over ${term} Years</div>
+                        <div class="text-3xl font-bold text-green-700">$${interest.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                    </div>
+                    <div class="bg-purple-50 p-4 rounded border border-purple-300">
+                        <div class="text-sm text-gray-600">Total Cost (Principal + Interest)</div>
+                        <div class="text-3xl font-bold text-purple-700">$${total.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                    </div>
+                `;
             });
 
-            document.getElementById('ai-submit').addEventListener('click', async () => {
-                const prompt = document.getElementById('ai-prompt').value;
+            // Refinance calculator
+            document.getElementById('refi-form')?.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const oldPayment = +(document.getElementById('old-payment')?.value || 0);
+                const newPayment = +(document.getElementById('new-payment')?.value || 0);
+                const refiCosts = +(document.getElementById('refi-costs')?.value || 0);
+
+                if (oldPayment <= 0 || newPayment <= 0 || refiCosts <= 0) {
+                    alert('Please enter all values');
+                    return;
+                }
+
+                const breakEven = calculateBreakEvenPoint(refiCosts, oldPayment, newPayment);
+                const resultDiv = document.getElementById('refi-results');
+
+                if (breakEven === null) {
+                    resultDiv.innerHTML = '<p class="text-red-600">New payment is not lower than old payment. Refinancing would not save money.</p>';
+                } else {
+                    const monthlySavings = oldPayment - newPayment;
+                    const years = Math.round(breakEven / 12 * 10) / 10;
+                    resultDiv.innerHTML = `
+                        <div class="bg-green-50 p-4 rounded border border-green-300">
+                            <p class="font-semibold text-lg mb-2">You will break even in <span class="text-green-700">${breakEven} months (${years} years)</span></p>
+                            <p class="text-sm text-gray-600">Monthly savings: $${monthlySavings.toLocaleString(undefined, {maximumFractionDigits: 2})}</p>
+                            <p class="text-sm text-gray-600">Total refinancing costs: $${refiCosts.toLocaleString()}</p>
+                        </div>
+                    `;
+                }
+            });
+
+            // Settings modal
+            const settingsBtn = document.getElementById('settings-btn');
+            const settingsBtnMobile = document.getElementById('settings-btn-mobile');
+            const settingsModal = document.getElementById('settings-modal');
+            const closeSettingsBtn = document.getElementById('close-settings');
+
+            [settingsBtn, settingsBtnMobile].forEach(btn => {
+                btn?.addEventListener('click', () => {
+                    settingsModal?.classList.remove('hidden');
+                });
+            });
+
+            closeSettingsBtn?.addEventListener('click', () => {
+                settingsModal?.classList.add('hidden');
+            });
+
+            document.getElementById('save-key')?.addEventListener('click', () => {
+                const key = document.getElementById('gemini-key')?.value;
+                const storage = document.querySelector('input[name="key-storage"]:checked')?.value;
+                if (storage === 'local') localStorage.setItem('geminiKey', key);
+                else sessionStorage.setItem('geminiKey', key);
+                alert('Key saved');
+            });
+
+            document.getElementById('clear-key')?.addEventListener('click', () => {
+                localStorage.removeItem('geminiKey');
+                sessionStorage.removeItem('geminiKey');
+                document.getElementById('gemini-key').value = '';
+                alert('Key cleared');
+            });
+
+            document.getElementById('export-btn')?.addEventListener('click', exportData);
+
+            document.getElementById('import-btn')?.addEventListener('click', async () => {
+                const file = document.getElementById('import-file')?.files[0];
+                if (!file) return;
+                const text = await file.text();
+                const data = JSON.parse(text);
+                if (!Array.isArray(data.rates)) {
+                    alert('Invalid import file format');
+                    return;
+                }
+                document.getElementById('import-preview').innerHTML = `
+                    <p class="text-sm mb-2">Import ${data.rates.length} records?</p>
+                    <button id="confirm-import" class="bg-green-500 text-white px-3 py-1 rounded mr-2">Merge</button>
+                    <button id="replace-import" class="bg-red-500 text-white px-3 py-1 rounded">Replace</button>
+                `;
+                document.getElementById('confirm-import')?.addEventListener('click', () => importData(data.rates, 'merge'));
+                document.getElementById('replace-import')?.addEventListener('click', () => importData(data.rates, 'replace'));
+            });
+
+            // AI submit
+            document.getElementById('ai-submit')?.addEventListener('click', async () => {
+                const prompt = document.getElementById('ai-prompt')?.value;
                 try {
                     const response = await callGemini(prompt);
                     document.getElementById('ai-response').innerHTML = response;
@@ -265,50 +687,7 @@
                     document.getElementById('ai-response').innerHTML = 'Error: ' + e.message;
                 }
             });
-
-            document.getElementById('settings-btn').addEventListener('click', () => {
-                document.getElementById('settings-modal').classList.remove('hidden');
-            });
-
-            document.getElementById('close-settings').addEventListener('click', () => {
-                document.getElementById('settings-modal').classList.add('hidden');
-            });
-
-            document.getElementById('save-key').addEventListener('click', () => {
-                const key = document.getElementById('gemini-key').value;
-                const storage = document.querySelector('input[name="key-storage"]:checked').value;
-                if (storage === 'local') localStorage.setItem('geminiKey', key);
-                else sessionStorage.setItem('geminiKey', key);
-                alert('Key saved');
-            });
-
-            document.getElementById('clear-key').addEventListener('click', () => {
-                localStorage.removeItem('geminiKey');
-                sessionStorage.removeItem('geminiKey');
-                document.getElementById('gemini-key').value = '';
-                alert('Key cleared');
-            });
-
-            document.getElementById('export-btn').addEventListener('click', exportData);
-
-            document.getElementById('import-btn').addEventListener('click', async () => {
-                const file = document.getElementById('import-file').files[0];
-                if (!file) return;
-                const text = await file.text();
-                const data = JSON.parse(text);
-                // Preview
-                document.getElementById('import-preview').innerHTML = `Import ${data.length} records? <button id="confirm-import">Merge</button> <button id="replace-import">Replace</button>`;
-                document.getElementById('confirm-import').addEventListener('click', () => importData(data, 'merge'));
-                document.getElementById('replace-import').addEventListener('click', () => importData(data, 'replace'));
-            });
         });
-
-        function renderTable(data) {
-            const table = document.getElementById('rates-table');
-            table.innerHTML = '<table class="min-w-full"><thead><tr><th>Lender</th><th>Rate</th><th>Date</th></tr></thead><tbody>' +
-                data.map(d => `<tr><td>${d.lender}</td><td>${d.rate}%</td><td>${d.date}</td></tr>`).join('') +
-                '</tbody></table>';
-        }
     </script>
 </body>
 </html>
